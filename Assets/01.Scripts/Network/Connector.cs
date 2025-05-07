@@ -56,7 +56,7 @@ namespace ServerCore
             }
             else
             {
-                Console.WriteLine($"OnConnectCompleted Failed : {args.SocketError}");
+                UnityEngine.Debug.Log($"ConnectorError! OnConnectCompleted Failed : {args.SocketError}");
             }
         }
     }

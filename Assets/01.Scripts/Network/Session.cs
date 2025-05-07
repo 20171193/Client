@@ -112,33 +112,10 @@ namespace ServerCore
         }
         public void Send(ArraySegment<byte> sendBuff)
         {
-            /************************** 수정 이전 *****************************************
-             * Send시 마다 계속해서 생산? (재사용이 불가하므로 성능상의 문제가 발생)
-            SocketAsyncEventArgs sendArgs = new SocketAsyncEventArgs();
-            sendArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnSendCompleted);
-            sendArgs.SetBuffer(sendBuff, 0, sendBuff.Length);
-
-             * Send 등록
-             ** 이도 마찬가지로 Send 소켓을 계속해서 등록하면 문제가 발생.
-             ** Send의 호출 스택이 증가
-            RegisterSend(sendArgs);
-            ******************************************************************************/
-
-            /************************** 수정 이후 *****************************************
-            _sendArgs.SetBuffer(sendBuff, 0, sendBuff.Length);
-            RegisterSend(); 
-             * sendArgs를 재사용하기위해 클래스 지역변수로 할당
-             ** 하지만, Send가 완료되지 않았는데 버퍼를 바꾸는 경우가 발생할 수 있음.
-             *** 최종적으로 Send 버퍼를 락과 큐를 활용하여 관리
-             *****************************************************************************/
-
-            /*********************************** 개선 ************************************
-             * 각각의 Send Buffer를 보내는 것이 아닌, 하나의 큰 Send Buffer를 생성하고,
-             * 해당 Buffer를 쪼개서 보낸다면 더 개선이 될 수 있음.
-             **********************************************************/
             lock (_lock)
             {
                 _sendQueue.Enqueue(sendBuff);
+                
                 if (_pendingList.Count == 0)
                     RegisterSend();
             }
@@ -162,7 +139,10 @@ namespace ServerCore
         private void RegisterSend()
         {
             if (_disconnected == 1)
+            {
+                UnityEngine.Debug.Log("RegisterSend Disconnected");
                 return;
+            }
 
             // _sendArgs.BufferList : 버퍼를 리스트로 만들어 한 번에 전송이 가능함.
             while (_sendQueue.Count > 0)
@@ -204,13 +184,20 @@ namespace ServerCore
                         OnSend(_sendArgs.BytesTransferred);
 
                         if (_sendQueue.Count > 0)
+                        {
                             // 락을 통한 예약대기 상태의 버퍼 처리
                             RegisterSend();
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"OnSendCompleted Failed {ex.ToString()}");
+                        UnityEngine.Debug.Log($"OnSendCompleted Failed {ex.ToString()}");
                     }
+                }
+                else
+                {
+                    UnityEngine.Debug.Log("Error : OnSendCompleted Disconnect");
+                    Disconnect();
                 }
             }
         }
